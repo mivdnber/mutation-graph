@@ -30,4 +30,4 @@ app.post('/api/:userId/scan/:target', (req, res) => {
 //   broadcast('hello');
 // }, 5000);
 
-app.listen(3000)
+app.listen(process.env.PORT || 3000)
