@@ -161,7 +161,8 @@ const addRandomLink = () => {
 // setInterval(addRandomLink, 1000);
 
 // Create WebSocket connection.
-const socket = new WebSocket(`ws://${window.location.host}/feed`);
+const protocol = window.location.protocol.replace('http', 'ws');
+const socket = new WebSocket(`${protocol}//${window.location.host}/feed`);
 
 // Connection opened
 socket.addEventListener('open', function (event) {
