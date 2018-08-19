@@ -4,75 +4,26 @@ const width = 960,
     clusterPadding = 6, // separation between different-color nodes
     maxRadius = 12;
 
-const n = 200, // total number of nodes
-    m = 10; // number of distinct clusters
+const m = 4; // number of distinct clusters
 
 const color = d3.scaleSequential(d3.interpolateRainbow)
     .domain(d3.range(m));
 
-// The largest node for each cluster.
-const clusters = new Array(m);
 
-const nodes = d3.range(n).map(id => {
-  const nodeCluster =  Math.floor(Math.random() * m);
-  const node = {
-    id,
-    cluster: nodeCluster,
-    radius: maxRadius,
-    x: Math.cos(nodeCluster / m * 2 * Math.PI) * 200 + width / 2 + Math.random(),
-    y: Math.sin(nodeCluster / m * 2 * Math.PI) * 200 + height / 2 + Math.random()
-  };
-  clusters[nodeCluster] = node;
-  return node;
+const initializeNode = node => ({
+  ...node,
+  x: Math.cos(node.cluster / m * 2 * Math.PI) * 200 + width / 2 + Math.random(),
+  y: Math.sin(node.cluster / m * 2 * Math.PI) * 200 + height / 2 + Math.random(),
+  radius: maxRadius,
 });
 
-const links = [
-  { source: 1, target: 150 },
-];
+let nodes = [];
+let links = [];
 
-// Move d to be adjacent to the cluster node.
-// from: https://bl.ocks.org/mbostock/7881887
-const cluster = () => {
 
-  let nodes,
-    strength = 0.1;
-  function force (alpha) {
-
-    // scale + curve alpha value
-    alpha *= strength * alpha;
-
-    nodes.forEach(function(d) {
-      let cluster = clusters[d.cluster];
-      if (cluster === d) return;
-      
-      let x = d.x - cluster.x,
-        y = d.y - cluster.y,
-        l = Math.sqrt(x * x + y * y),
-        r = d.radius + cluster.radius;
-
-      if (l != r) {
-        l = (l - r) / l * alpha;
-        d.x -= x *= l;
-        d.y -= y *= l;
-        cluster.x += x;
-        cluster.y += y;
-      }
-    });
-
-  }
-
-  force.initialize = function (_) {
-    nodes = _;
-  }
-
-  force.strength = _ => {
-    strength = _ == null ? strength : _;
-    return force;
-  };
-
-  return force;
+const connectivity = nodeId => {
+  return links.filter(n => n.source.id == nodeId || n.target.id == nodeId).length;
 }
-
 
 let svg = d3
   .select("body")
@@ -88,12 +39,13 @@ let nodeGroup = svg.append('g')
 
 const simulation = d3.forceSimulation()
   // keep entire simulation balanced around screen center
-  .force('center', d3.forceCenter(width / 2, height / 2))
-  // cluster by section
-  .force('cluster', cluster().strength(0.2))
-  // apply collision with padding
-  .force('collide', d3.forceCollide(d => d.radius + padding).strength(0.7))
-  .force('link', d3.forceLink().id(d => d.id).strength(.5).distance(50))
+  .force('center', d3.forceCenter(width / 2, height / 2, .1))
+  // make connected nodes repulse other nodes
+  .force('gravity', d3.forceManyBody().strength(n => -100*connectivity(n.id)).distanceMax(60))
+  .force('collide', d3.forceCollide(d => d.radius + padding).strength(0.3))
+  .force('link', d3.forceLink().id(d => d.id).strength(.3).distance(100))
+  .alphaDecay(0)
+  .alpha(.5);
 
 const update = () => {
   const link = linkGroup
@@ -121,13 +73,11 @@ const update = () => {
         .attr("r", d => d.radius);
   
   // node = node.merge(addedNode);
-  simulation.alpha(1.0);
-  simulation.restart();
+  // simulation.alpha(1.0);
+  // simulation.restart();
   simulation.nodes(nodes);
   simulation.force('link').links(links);
 }
-
-update();
 
 const layoutTick = e => {
   linkGroup
@@ -143,7 +93,16 @@ const layoutTick = e => {
     .attr("r", d => d.radius);
 };
 
-simulation.on('tick', layoutTick)
+const init = async () => {
+  const response = await fetch('/viz/data');
+  const data = await response.json();
+  nodes = data.nodes.map(initializeNode);
+  links = data.links;
+  update();
+  simulation.on('tick', layoutTick)
+};
+
+init();
 
 const addLink = link => {
   links.push({ ...link, id: links.length });
